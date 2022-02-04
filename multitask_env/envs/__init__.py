@@ -1,0 +1,3 @@
+from multitask_env.envs.walker2d_forward import Walker2dForwardEnv
+from multitask_env.envs.walker2d_backward import Walker2dBackwardEnv
+from multitask_env.envs.walker2d_jump import Walker2dJumpEnv
