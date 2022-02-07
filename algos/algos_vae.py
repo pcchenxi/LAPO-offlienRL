@@ -197,10 +197,10 @@ class Latent(object):
                         actor_action = self.actor_vae_target.decode(state)
                     else:
                         latent_action = self.actor_target(state)
-                        # if not self.no_noise:
-                            # latent_action += (torch.randn_like(latent_action) * 0.2).clamp(-0.5, 0.5)
+                        if not self.no_noise:
+                            latent_action += (torch.randn_like(latent_action) * 0.2).clamp(-0.5, 0.5)
                         actor_action = self.actor_vae_target.decode(state, z=latent_action)
-                        actor_action += (torch.randn_like(actor_action) * 0.2).clamp(-0.5, 0.5)
+                        # actor_action += (torch.randn_like(actor_action) * 0.2).clamp(-0.5, 0.5)
 
                     target_v1, target_v2 = self.critic_target(state, actor_action)
                     target_v = torch.min(target_v1, target_v2)*self.doubleq_min + torch.max(target_v1, target_v2)*(1-self.doubleq_min)

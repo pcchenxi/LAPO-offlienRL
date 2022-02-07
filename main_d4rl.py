@@ -82,9 +82,9 @@ if __name__ == "__main__":
     parser.add_argument('--discount', default=0.99, type=float)	            # actor network size
 
     parser.add_argument('--expectile', default=0.9, type=float)	            # expectile to compute weight for samples
-    parser.add_argument('--kl_beta', default=1.2, type=float)	            # weight for kl loss to train CVAE
+    parser.add_argument('--kl_beta', default=1.0, type=float)	            # weight for kl loss to train CVAE
     parser.add_argument('--max_latent_action', default=2, type=float)	    # maximum value for the latent policy
-    parser.add_argument('--doubleq_min', default=0.8, type=float)
+    parser.add_argument('--doubleq_min', default=1.0, type=float)
     parser.add_argument('--no_piz', action='store_true')
     parser.add_argument('--no_noise', action='store_true')
 
