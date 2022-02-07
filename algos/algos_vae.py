@@ -178,7 +178,7 @@ class Latent(object):
             action = self.replay_buffer.unnormalize_action(action)
         return action
 
-    def kl_loss(self, mu, log_var, target_std=0.5):
+    def kl_loss(self, mu, log_var):
         KL_loss = -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1).view(-1, 1)
         return KL_loss
 
@@ -197,9 +197,10 @@ class Latent(object):
                         actor_action = self.actor_vae_target.decode(state)
                     else:
                         latent_action = self.actor_target(state)
-                        if not self.no_noise:
-                            latent_action += (torch.randn_like(latent_action) * 0.2).clamp(-0.5, 0.5)
+                        # if not self.no_noise:
+                            # latent_action += (torch.randn_like(latent_action) * 0.2).clamp(-0.5, 0.5)
                         actor_action = self.actor_vae_target.decode(state, z=latent_action)
+                        actor_action += (torch.randn_like(actor_action) * 0.2).clamp(-0.5, 0.5)
 
                     target_v1, target_v2 = self.critic_target(state, actor_action)
                     target_v = torch.min(target_v1, target_v2)*self.doubleq_min + torch.max(target_v1, target_v2)*(1-self.doubleq_min)
@@ -208,8 +209,8 @@ class Latent(object):
                 current_v = self.critic.v(state)
 
                 v_loss = F.mse_loss(current_v, target_v.clamp(self.min_v, self.max_v))
-                critic_loss_1 = F.mse_loss(current_Q1, target_Q)
-                critic_loss_2 = F.mse_loss(current_Q2, target_Q)
+                critic_loss_1 = F.mse_loss(current_Q1, target_Q.clamp(self.min_v, self.max_v))
+                critic_loss_2 = F.mse_loss(current_Q2, target_Q.clamp(self.min_v, self.max_v))
                 critic_loss = (critic_loss_1 + critic_loss_2 + v_loss) 
                 
                 self.critic_optimizer.zero_grad()
@@ -217,8 +218,8 @@ class Latent(object):
                 self.critic_optimizer.step()
 
                 # compute adv and weight
-                current_v = self.critic.v(state).detach()
-                q_action = reward + not_done * self.discount * self.critic.v(next_state)
+                current_v = self.critic.v(state).clamp(self.min_v, self.max_v)
+                q_action = reward + not_done * self.discount * self.critic.v(next_state).clamp(self.min_v, self.max_v)
                 adv = (q_action - current_v)
 
                 w_sign = (adv > 0).float()
