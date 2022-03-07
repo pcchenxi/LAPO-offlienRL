@@ -130,14 +130,14 @@ class Critic(nn.Module):
 
 class Latent(object):
     def __init__(self, state_dim, action_dim, latent_dim, max_action, min_v, max_v, replay_buffer, 
-                 device, discount=0.99, tau=0.005, actor_lr=1e-4, critic_lr=5e-4, 
+                 device, discount=0.99, tau=0.005, vae_lr=1e-4, actor_lr=1e-4, critic_lr=5e-4, 
                  max_latent_action=1, expectile=0.8, kl_beta=1.0, 
                  no_piz=False, no_noise=True, doubleq_min=0.8):
 
         self.device = torch.device(device)
         self.actor_vae = ActorVAE(state_dim, action_dim, latent_dim, max_latent_action, self.device).to(self.device)
         self.actor_vae_target = copy.deepcopy(self.actor_vae)
-        self.actorvae_optimizer = torch.optim.Adam(self.actor_vae.parameters(), lr=actor_lr)
+        self.actorvae_optimizer = torch.optim.Adam(self.actor_vae.parameters(), lr=vae_lr)
 
         self.actor = Actor(state_dim, latent_dim, max_latent_action, self.device).to(self.device)
         self.actor_target = copy.deepcopy(self.actor)
@@ -173,7 +173,7 @@ class Latent(object):
                 action = self.actor_vae.decode(state).cpu().data.numpy().flatten()
             else:
                 latent_a = self.actor(state)
-                action = self.actor_vae_target.decode(state, z=latent_a).cpu().data.numpy().flatten()
+                action = self.actor_vae.decode(state, z=latent_a).cpu().data.numpy().flatten()
                                 
             action = self.replay_buffer.unnormalize_action(action)
         return action
@@ -182,25 +182,27 @@ class Latent(object):
         KL_loss = -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1).view(-1, 1)
         return KL_loss
 
-    def train(self, iterations, batch_size=100, kl_beta_list=None):
+    def train(self, iterations, batch_size=100, kl_beta_list=None, replay_buffer=None):
         for it in range(iterations):
             # Sample replay buffer / batch
-            state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
+            if replay_buffer is None:
+                state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
+            else:
+                state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 
             # Critic Training
             if True:
                 with torch.no_grad():
                     next_target_v = self.critic_target.v(next_state)
-                    target_Q = reward + not_done * self.discount * next_target_v                
+                    target_Q = reward + not_done * self.discount * next_target_v         
                    
                     if self.no_piz:
                         actor_action = self.actor_vae_target.decode(state)
                     else:
                         latent_action = self.actor_target(state)
-                        if not self.no_noise:
-                            latent_action += (torch.randn_like(latent_action) * 0.2).clamp(-0.5, 0.5)
                         actor_action = self.actor_vae_target.decode(state, z=latent_action)
-                        # actor_action += (torch.randn_like(actor_action) * 0.2).clamp(-0.5, 0.5)
+                        if not self.no_noise:
+                            actor_action += (torch.randn_like(actor_action) * 0.1).clamp(-0.3, 0.3)
 
                     target_v1, target_v2 = self.critic_target(state, actor_action)
                     target_v = torch.min(target_v1, target_v2)*self.doubleq_min + torch.max(target_v1, target_v2)*(1-self.doubleq_min)
@@ -209,8 +211,8 @@ class Latent(object):
                 current_v = self.critic.v(state)
 
                 v_loss = F.mse_loss(current_v, target_v.clamp(self.min_v, self.max_v))
-                critic_loss_1 = F.mse_loss(current_Q1, target_Q.clamp(self.min_v, self.max_v))
-                critic_loss_2 = F.mse_loss(current_Q2, target_Q.clamp(self.min_v, self.max_v))
+                critic_loss_1 = F.mse_loss(current_Q1, target_Q)
+                critic_loss_2 = F.mse_loss(current_Q2, target_Q)
                 critic_loss = (critic_loss_1 + critic_loss_2 + v_loss) 
                 
                 self.critic_optimizer.zero_grad()
@@ -218,8 +220,8 @@ class Latent(object):
                 self.critic_optimizer.step()
 
                 # compute adv and weight
-                current_v = self.critic.v(state).clamp(self.min_v, self.max_v)
-                q_action = reward + not_done * self.discount * self.critic.v(next_state).clamp(self.min_v, self.max_v)
+                current_v = self.critic_target.v(state)
+                q_action = reward + not_done * self.discount * self.critic_target.v(next_state)
                 adv = (q_action - current_v)
 
                 w_sign = (adv > 0).float()
@@ -241,7 +243,9 @@ class Latent(object):
                 if not self.no_piz:
                     # train latent policy 
                     latent_actor_action = self.actor(state)
-                    actor_action = self.actor_vae_target.decode(state, z=latent_actor_action)
+                    actor_action = self.actor_vae.decode(state, z=latent_actor_action)
+                    actor_action += (torch.randn_like(actor_action) * 0.02).clamp(-0.05, 0.05)
+
                     q_pi = self.critic.q1(state, actor_action)
                 
                     actor_loss = -q_pi.mean()
@@ -256,23 +260,6 @@ class Latent(object):
                     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
                 for param, target_param in zip(self.actor_vae.parameters(), self.actor_vae_target.parameters()):
                     target_param.data.copy_(self.tau_vae * param.data + (1 - self.tau_vae) * target_param.data)
-
-        # # Logging
-        # # logger.record_dict(create_stats_ordered_dict('Q_target', target_Q.cpu().data.numpy(),))
-        # # logger.record_dict(create_stats_ordered_dict('exp_qa', exp_qa.cpu().data.numpy(),))
-        # # logger.record_tabular('Adv', adv.mean().cpu().data.numpy())
-        # logger.record_tabular('recon_loss', recons_loss_ori.mean().cpu().data.numpy())
-        # logger.record_tabular('KL_loss', (KL_loss).mean().cpu().data.numpy())
-        # logger.record_tabular('Critic Loss', critic_loss.cpu().data.numpy())
-        # # logger.record_dict(create_stats_ordered_dict('Actions', actions_pi.cpu().data.numpy()))
-        # # logger.record_dict(create_stats_ordered_dict('Latent Actions', actor_latent.cpu().data.numpy()))
-        # # logger.record_dict(create_stats_ordered_dict('weights', weights.cpu().data.numpy()))
-        # # logger.record_dict(create_stats_ordered_dict('Sample_Weight', weights_new.cpu().data.numpy()))
-        # # logger.record_dict(create_stats_ordered_dict('Latent Actions', sample.cpu().data.numpy()))
-        # logger.record_dict(create_stats_ordered_dict('Current_Q', current_v.cpu().data.numpy()))
-        # # logger.record_tabular('recon_loss_weighted', (recon_loss*weights).mean().cpu().data.numpy())
-        # # logger.record_tabular('KL_loss_weighted', (KL_loss*weights).mean().cpu().data.numpy())
-        # logger.record_tabular('KL_weight', self.kl_beta)
 
         assert (np.abs(np.mean(target_Q.cpu().data.numpy())) < 1e6)
 

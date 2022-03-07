@@ -20,6 +20,8 @@ class ReplayBuffer(object):
         self.storage['reward'] = np.zeros((max_size, 1))
         self.storage['not_done'] = np.zeros((max_size, 1))
 
+        self.min_r, self.max_r = 0, 0
+
         self.action_mean = None
         self.action_std = None
         self.state_mean = None
@@ -57,16 +59,33 @@ class ReplayBuffer(object):
         np.save("./buffers/" + filename + ".npy", self.storage)
 
     def normalize_state(self, state):
-        return (state - self.state_mean)/(self.state_std+0.00001)
+        return (state - self.state_mean)/(self.state_std+0.000001)
 
     def unnormalize_state(self, state):
-        return state * (self.state_std+0.00001) + self.state_mean
+        return state * (self.state_std+0.000001) + self.state_mean
 
     def normalize_action(self, action):
-        return (action - self.action_mean)/(self.action_std+0.00001)
+        return (action - self.action_mean)/(self.action_std+0.000001)
 
     def unnormalize_action(self, action):
-        return action * (self.action_std+0.00001) + self.action_mean
+        return action * (self.action_std+0.000001) + self.action_mean
+
+    def renormalize(self):
+        self.storage['state'] = self.unnormalize_state(self.storage['state'])
+        self.storage['next_state'] = self.unnormalize_state(self.storage['next_state'])
+        self.storage['action'] = self.unnormalize_action(self.storage['action'])
+
+        self.action_mean = np.mean(self.storage['action'][:self.size], axis=0)
+        self.action_std = np.std(self.storage['action'][:self.size], axis=0)
+        self.state_mean = np.mean(self.storage['state'][:self.size], axis=0)
+        self.state_std = np.std(self.storage['state'][:self.size], axis=0)        
+
+        self.storage['state'] = self.normalize_state(self.storage['state'])
+        self.storage['next_state'] = self.normalize_state(self.storage['next_state'])
+        self.storage['action'] = self.normalize_action(self.storage['action'])
+
+        self.min_r = self.storage['reward'].min()
+        self.max_r = self.storage['reward'].max()
 
     def load(self, data):
         assert('next_observations' in data.keys())
@@ -83,8 +102,4 @@ class ReplayBuffer(object):
         self.storage['state'] = self.normalize_state(self.storage['state'])
         self.storage['next_state'] = self.normalize_state(self.storage['next_state'])
         self.storage['action'] = self.normalize_action(self.storage['action'])
-
-        # print(self.state_mean, self.state_std, self.action_mean, self.action_std)
-        print("Dataset size:" + str(self.size))
-        print(self.storage['reward'].min(), self.storage['reward'].max())
 
