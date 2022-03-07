@@ -182,84 +182,80 @@ class Latent(object):
         KL_loss = -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1).view(-1, 1)
         return KL_loss
 
-    def train(self, iterations, batch_size=100, kl_beta_list=None, replay_buffer=None):
+    def train(self, iterations, batch_size=100, kl_beta_list=None):
         for it in range(iterations):
             # Sample replay buffer / batch
-            if replay_buffer is None:
-                state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
-            else:
-                state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
+            state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
 
             # Critic Training
-            if True:
-                with torch.no_grad():
-                    next_target_v = self.critic_target.v(next_state)
-                    target_Q = reward + not_done * self.discount * next_target_v         
-                   
-                    if self.no_piz:
-                        actor_action = self.actor_vae_target.decode(state)
-                    else:
-                        latent_action = self.actor_target(state)
-                        actor_action = self.actor_vae_target.decode(state, z=latent_action)
-                        if not self.no_noise:
-                            actor_action += (torch.randn_like(actor_action) * 0.1).clamp(-0.3, 0.3)
-
-                    target_v1, target_v2 = self.critic_target(state, actor_action)
-                    target_v = torch.min(target_v1, target_v2)*self.doubleq_min + torch.max(target_v1, target_v2)*(1-self.doubleq_min)
-
-                current_Q1, current_Q2 = self.critic(state, action)
-                current_v = self.critic.v(state)
-
-                v_loss = F.mse_loss(current_v, target_v.clamp(self.min_v, self.max_v))
-                critic_loss_1 = F.mse_loss(current_Q1, target_Q)
-                critic_loss_2 = F.mse_loss(current_Q2, target_Q)
-                critic_loss = (critic_loss_1 + critic_loss_2 + v_loss) 
+            with torch.no_grad():
+                next_target_v = self.critic_target.v(next_state)
+                target_Q = reward + not_done * self.discount * next_target_v         
                 
-                self.critic_optimizer.zero_grad()
-                critic_loss.backward()
-                self.critic_optimizer.step()
+                if self.no_piz:
+                    actor_action = self.actor_vae_target.decode(state)
+                else:
+                    latent_action = self.actor_target(state)
+                    actor_action = self.actor_vae_target.decode(state, z=latent_action)
+                    if not self.no_noise:
+                        actor_action += (torch.randn_like(actor_action) * 0.1).clamp(-0.3, 0.3)
 
-                # compute adv and weight
-                current_v = self.critic_target.v(state)
-                q_action = reward + not_done * self.discount * self.critic_target.v(next_state)
-                adv = (q_action - current_v)
+                target_v1, target_v2 = self.critic_target(state, actor_action)
+                target_v = torch.min(target_v1, target_v2)*self.doubleq_min + torch.max(target_v1, target_v2)*(1-self.doubleq_min)
 
-                w_sign = (adv > 0).float()
-                weights = (1 - w_sign) * (1 - self.expectile) + w_sign * self.expectile
+            current_Q1, current_Q2 = self.critic(state, action)
+            current_v = self.critic.v(state)
 
-                # train weighted CVAE
-                recons_action, z_sample, mu, log_var = self.actor_vae(state, action)
+            v_loss = F.mse_loss(current_v, target_v.clamp(self.min_v, self.max_v))
+            critic_loss_1 = F.mse_loss(current_Q1, target_Q)
+            critic_loss_2 = F.mse_loss(current_Q2, target_Q)
+            critic_loss = (critic_loss_1 + critic_loss_2 + v_loss) 
+            
+            self.critic_optimizer.zero_grad()
+            critic_loss.backward()
+            self.critic_optimizer.step()
 
-                recons_loss_ori = F.mse_loss(recons_action, action, reduction='none')
-                recon_loss = torch.sum(recons_loss_ori, 1).view(-1, 1)
-                KL_loss = self.kl_loss(mu, log_var)
-                actor_vae_loss = (recon_loss + KL_loss*self.kl_beta)*weights.detach()
-                
-                actor_vae_loss = actor_vae_loss.mean()
-                self.actorvae_optimizer.zero_grad()
-                actor_vae_loss.backward()
-                self.actorvae_optimizer.step()
+            # compute adv and weight
+            current_v = self.critic_target.v(state)
+            q_action = reward + not_done * self.discount * self.critic_target.v(next_state)
+            adv = (q_action - current_v)
 
-                if not self.no_piz:
-                    # train latent policy 
-                    latent_actor_action = self.actor(state)
-                    actor_action = self.actor_vae.decode(state, z=latent_actor_action)
-                    actor_action += (torch.randn_like(actor_action) * 0.02).clamp(-0.05, 0.05)
+            w_sign = (adv > 0).float()
+            weights = (1 - w_sign) * (1 - self.expectile) + w_sign * self.expectile
 
-                    q_pi = self.critic.q1(state, actor_action)
-                
-                    actor_loss = -q_pi.mean()
-                    self.actor_optimizer.zero_grad()
-                    actor_loss.backward()
-                    self.actor_optimizer.step()
+            # train weighted CVAE
+            recons_action, z_sample, mu, log_var = self.actor_vae(state, action)
 
-                # Update Target Networks
-                for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-                for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
-                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-                for param, target_param in zip(self.actor_vae.parameters(), self.actor_vae_target.parameters()):
-                    target_param.data.copy_(self.tau_vae * param.data + (1 - self.tau_vae) * target_param.data)
+            recons_loss_ori = F.mse_loss(recons_action, action, reduction='none')
+            recon_loss = torch.sum(recons_loss_ori, 1).view(-1, 1)
+            KL_loss = self.kl_loss(mu, log_var)
+            actor_vae_loss = (recon_loss + KL_loss*self.kl_beta)*weights.detach()
+            
+            actor_vae_loss = actor_vae_loss.mean()
+            self.actorvae_optimizer.zero_grad()
+            actor_vae_loss.backward()
+            self.actorvae_optimizer.step()
+
+            if not self.no_piz:
+                # train latent policy 
+                latent_actor_action = self.actor(state)
+                actor_action = self.actor_vae.decode(state, z=latent_actor_action)
+                actor_action += (torch.randn_like(actor_action) * 0.02).clamp(-0.05, 0.05)
+
+                q_pi = self.critic.q1(state, actor_action)
+            
+                actor_loss = -q_pi.mean()
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                self.actor_optimizer.step()
+
+            # Update Target Networks
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(self.actor_vae.parameters(), self.actor_vae_target.parameters()):
+                target_param.data.copy_(self.tau_vae * param.data + (1 - self.tau_vae) * target_param.data)
 
         assert (np.abs(np.mean(target_Q.cpu().data.numpy())) < 1e6)
 
