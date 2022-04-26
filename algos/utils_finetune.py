@@ -103,4 +103,3 @@ class ReplayBuffer(object):
         # print(self.state_mean, self.state_std, self.action_mean, self.action_std)
         print("Dataset size:" + str(self.size))
         print(self.min_r, self.max_r)
-
