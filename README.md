@@ -1,6 +1,6 @@
-# latent-variable advantage-weighted policy optimization for offline reinforcement learning
+# Latent-variable Advantage-weighted Policy Optimization for Offline Reinforcement Learning
 
-This is a pytorch implementation of paper [latent-variable advantage-weighted policy optimization for offline reinforcement learning (LAPO)](https://arxiv.org/pdf/2203.08949.pdf) on [D4RL](https://github.com/rail-berkeley/d4rl) dataset.
+This is a pytorch implementation of paper [Latent-variable advantage-weighted policy optimization for offline reinforcement learning (LAPO)](https://arxiv.org/pdf/2203.08949.pdf) on [D4RL](https://github.com/rail-berkeley/d4rl) dataset.
 
 ![LAPO-framwork](https://github.com/pcchenxi/LAPO-offlienRL/blob/main/figs/LAPO.jpg)
 
