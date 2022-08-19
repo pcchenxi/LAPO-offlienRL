@@ -34,7 +34,7 @@ $ python main_d4rl.py --env_name kitchen-complete-v0
 
 ## Expected results
 
-You will get following results using seed: 123(red) 456(green) 789(blue)
+You will get following results using --seed: 123(red) 456(green) 789(blue)
 
 ![LAPO-framwork](https://github.com/pcchenxi/LAPO-offlienRL/blob/main/figs/result_3seeds.jpg)
 
