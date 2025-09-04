@@ -1,6 +1,6 @@
 # Latent-variable Advantage-weighted Policy Optimization for Offline Reinforcement Learning
 
-This is a pytorch implementation of paper [Latent-variable advantage-weighted policy optimization for offline reinforcement learning (LAPO)](https://arxiv.org/pdf/2203.08949.pdf) on [D4RL](https://github.com/rail-berkeley/d4rl) dataset.
+This is a pytorch implementation of paper [Latent-variable advantage-weighted policy optimization for offline reinforcement learning (LAPO)](https://proceedings.neurips.cc/paper_files/paper/2022/hash/efb2072a358cefb75886a315a6fcf880-Abstract-Conference.html) on [D4RL](https://github.com/rail-berkeley/d4rl) dataset.
 
 ![LAPO-framwork](https://github.com/pcchenxi/LAPO-offlienRL/blob/main/figs/LAPO.jpg)
 
@@ -41,10 +41,12 @@ You will get following results using --seed: 123(red) 456(green) 789(blue)
 ## Citing
 If you find this code useful, please cite our paper:
 ```
-@article{chen2022latent,
-  title={Latent-Variable Advantage-Weighted Policy Optimization for Offline RL},
-  author={Chen, Xi and Ghadirzadeh, Ali and Yu, Tianhe and Gao, Yuan and Wang, Jianhao and Li, Wenzhe and Liang, Bin and Finn, Chelsea and Zhang, Chongjie},
-  journal={arXiv preprint arXiv:2203.08949},
+@article{chen2022lapo,
+  title={Lapo: Latent-variable advantage-weighted policy optimization for offline reinforcement learning},
+  author={Chen, Xi and Ghadirzadeh, Ali and Yu, Tianhe and Wang, Jianhao and Gao, Alex Yuan and Li, Wenzhe and Bin, Liang and Finn, Chelsea and Zhang, Chongjie},
+  journal={Advances in Neural Information Processing Systems},
+  volume={35},
+  pages={36902--36913},
   year={2022}
 }
 ```
