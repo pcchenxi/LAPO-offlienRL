@@ -39,10 +39,7 @@ def eval_policy(policy, env, replay_buffer, eval_episodes=10, plot=False):
             avg_reward += reward
             states_list.append(state)
             ep_reward.append(reward)
-        # print('--', np.mean(ep_reward), np.mean(q1_list), np.mean(q2_list), np.mean(v_list))
-        # print('   ---', np.mean(ep_reward), v_list[0], v_list[-1], np.mean(q1_list))
         print('   ---', np.mean(ep_reward), q1_list[0], q1_list[-1], np.mean(q1_list))
-        # print('--', q1_list[-1], q2_list[-1], v_list[-1])
         print('---', state[0], state[1], len(states_list))
 
         states_list = np.array(states_list)
@@ -65,10 +62,6 @@ def eval_policy(policy, env, replay_buffer, eval_episodes=10, plot=False):
     print ("---------------------------------------")
     return info
 
-def wif(id):
-    np.random.seed(np.random.get_state()[1][0] + id)
-    # print(id, torch.initial_seed(), flush=True)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Additional parameters
@@ -76,10 +69,10 @@ if __name__ == "__main__":
     parser.add_argument('--log_dir', default='./results/', type=str)    # Logging directory
     parser.add_argument("--load_model", default=0, type=int)          # Load model and optimizer parameters
     parser.add_argument("--save_model", default=True, type=bool)        # Save model and optimizer parameters
-    parser.add_argument("--save_freq", default=5, type=int)           # How often it saves the model (epoch)
+    parser.add_argument("--save_freq", default=50, type=int)           # How often it saves the model (epoch)
     parser.add_argument("--env_name", default="maze2d-large-v1")     # OpenAI gym environment name
-    parser.add_argument("--seed", default=123, type=int)                  # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--eval_freq", default=5000, type=int)           # How often (time steps) we evaluate
+    parser.add_argument("--seed", default=789, type=int)                  # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--eval_freq", default=10000, type=int)           # How often (time steps) we evaluate
     parser.add_argument("--max_timesteps", default=1e6, type=int)      # Max time steps to run environment for
     parser.add_argument('--batch_size', default=512, type=int)
     parser.add_argument('--vae_lr', default=2e-4, type=float)	        # action policy (VAE) learning rate
@@ -90,7 +83,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--expectile', default=0.9, type=float)	        # expectile to compute weight for samples
     parser.add_argument('--kl_beta', default=1.0, type=float)	            # weight for kl loss to train CVAE
-    parser.add_argument('--max_latent_action', default=2.0, type=float)	# maximum value for the latent policy
+    parser.add_argument('--max_latent_action', default=0.675, type=float)	# maximum value for the latent policy
     parser.add_argument('--doubleq_min', default=1.0, type=float)         # weight for the minimum Q value
     parser.add_argument('--no_noise', action='store_true')              # adding noise to the latent policy or not
 
@@ -129,50 +122,33 @@ if __name__ == "__main__":
     dataset = d4rl.qlearning_dataset(env)  # Load d4rl dataset
     if 'antmaze' in args.env_name:
         dataset['rewards'] = (dataset['rewards']*100) #(dataset['rewards']*300)
-        # dataset['rewards'] = (dataset['rewards']-1)
         min_v = 0
         max_v = 100
-        # dataset['terminals'][:] = False
     else:
+        dataset['rewards'] = dataset['rewards'] - dataset['rewards'].min()
         dataset['rewards'] = dataset['rewards']/dataset['rewards'].max()
         min_v = dataset['rewards'].min()/(1-args.discount)
         max_v = dataset['rewards'].max()/(1-args.discount)
-            # dataset['rewards'] = (dataset['rewards']+0.05) #(dataset['rewards']*10)
 
-    # dataloader = create_dataloader(dataset, args.batch_size, args.eval_freq)
     d4rl_dataset = D4rlDataset(dataset, args.env_name)
     dataloader = DataLoader(
         d4rl_dataset,
         sampler=torch.utils.data.RandomSampler(d4rl_dataset, num_samples=args.batch_size*args.eval_freq, replacement=True),
-        # shuffle=True,
         batch_size=args.batch_size,
         num_workers=2,
         pin_memory=True,
         drop_last=True,
-        worker_init_fn=wif,
     )
 
-    latent_dim = max(8, int(action_dim*2))
+    latent_dim = int(action_dim*2)
     policy = algos.Latent(state_dim, action_dim, latent_dim, min_v, max_v,
                         device=args.device, discount=args.discount, tau=args.tau, 
                         vae_lr=args.vae_lr, actor_lr=args.actor_lr, critic_lr=args.critic_lr, 
                         max_latent_action=args.max_latent_action, expectile=args.expectile, kl_beta=args.kl_beta, 
                         doubleq_min=args.doubleq_min)
 
-    if args.load_model != 0:
-        # policy.load('model_' + str(args.load_model), folder_name)
-        load_file_name = f"Exp{args.load_model:04d}/{args.env_name}"
-        load_folder_name = os.path.join(args.log_dir, load_file_name)
-        print('loading model:', load_folder_name)
-        policy.load('model', load_folder_name)
-        training_iters = 0 #int(args.load_model)
-    else:
-        training_iters = 0
-
-    # policy.load('model_' + str(training_iters), folder_name)
-
     num_itr = int(args.max_timesteps/args.eval_freq)
-    with tqdm(range(num_itr), desc='Epoch') as tglobal:
+    with tqdm(range(num_itr), desc='Epoch', leave=False) as tglobal:
         for epoch_idx in tglobal:
             act_list, crit_list, rec_list, kl_list, w_list = [], [], [], [], []
             iter = 0
@@ -180,37 +156,23 @@ if __name__ == "__main__":
             with tqdm(dataloader, desc='Batch', leave=False) as tepoch:
                 for batch in tepoch:
                     # Train
-                    if epoch_idx < 0:
-                        init_beta = True
-                        crit_loss, recons_loss, kl_loss = policy.init_vae(batch)
-                        crit_list.append(crit_loss)
+                    sample_w, act_loss, crit_loss, recons_loss, kl_loss = policy.train_step(batch, iter)
+                    iter += 1
+                    crit_list.append(crit_loss)
+                    if act_loss is not None:
+                        act_list.append(act_loss)
+                    if recons_loss is not None:
                         rec_list.append(recons_loss)
+                    if kl_loss is not None:
                         kl_list.append(kl_loss)
-                        tepoch.set_postfix(crit_loss=np.mean(crit_list), rec_loss=np.mean(rec_list), kl_loss=np.mean(kl_list))
-                    else:
-                        init_beta = False
 
-                        sample_w, act_loss, crit_loss, recons_loss, kl_loss = policy.train_step(batch, iter, init_beta)
-                        # sample_w, sample_idx = policy.train_step(batch, iter, update_weight=update_weight)
-                        iter += 1
-                        # if update_weight:
-                        d4rl_dataset.update_weight(batch['idx'].numpy(), sample_w.flatten())
-                        crit_list.append(crit_loss)
-                        if act_loss is not None:
-                            act_list.append(act_loss)
-                        if recons_loss is not None:
-                            rec_list.append(recons_loss)
-                        if kl_loss is not None:
-                            kl_list.append(kl_loss)
-
-                        w_list.append(np.mean(sample_w))
-                        tepoch.set_postfix(w=np.mean(w_list), act=np.mean(act_list), crit=np.mean(crit_list), 
-                                           rec=np.mean(rec_list), kl=np.mean(kl_list))
+                    w_list.append(np.mean(sample_w))
+                    tepoch.set_postfix(w=np.mean(w_list), act=np.mean(act_list), crit=np.mean(crit_list), 
+                                        rec=np.mean(rec_list), kl=np.mean(kl_list))
 
             # Save Model
             if epoch_idx % args.save_freq == 0 and args.save_model and epoch_idx != 0:
                 policy.save('model', folder_name)
-                # policy.save('model_' + str(training_iters), folder_name)
 
             # Eval
             logger.record_tabular('Training Epochs', int(epoch_idx))
@@ -230,6 +192,5 @@ if __name__ == "__main__":
             logger.dump_tabular()
             tglobal.set_postfix(w=np.mean(w_list), act=np.mean(act_list), crit=np.mean(crit_list), 
                                            rec=np.mean(rec_list), kl=np.mean(kl_list))
-            print('beta', policy.kl_beta)
 
-    # policy.save('model_' + str(training_iters), folder_name)
+    policy.save('model', folder_name)
