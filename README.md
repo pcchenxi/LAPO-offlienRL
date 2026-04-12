@@ -14,12 +14,12 @@ This is a pytorch implementation of paper [Latent-variable advantage-weighted po
 
 Maze2d: maze2d-umaze/medium/large-v1
 ```shell
-$ python main_d4rl.py --env_name maze2d-umaze-v1 --kl_beta 0.3 --plot
+$ python main_d4rl.py --env_name maze2d-umaze-v1 --plot
 ```
 
 Antmaze: antmaze-umaze/medium/large-diverse-v1
 ```shell
-$ python main_d4rl.py --env_name antmaze-umaze-diverse-v1 --doubleq_min 0.7 --plot
+$ python main_d4rl.py --env_name antmaze-umaze-diverse-v1 --plot
 ```
 
 Mujoco locomotion: hopper/walker2d/halfcheetah-random/medium/expert-v2
