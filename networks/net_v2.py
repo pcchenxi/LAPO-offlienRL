@@ -14,11 +14,9 @@ class Actor(nn.Module):
         self.pi3 = nn.Linear(hidden_size[1], hidden_size[2])
         self.pi4 = nn.Linear(hidden_size[2], latent_dim)
 
-        self.norm1 = nn.LayerNorm(hidden_size[0])
         self.max_action = max_action
 
     def forward(self, state):
-        # a = F.relu(self.norm1(self.pi1(state)))
         a = F.relu(self.pi1(state))
         a = F.relu(self.pi2(a))
         a = F.relu(self.pi3(a))
@@ -44,16 +42,12 @@ class ActorVAE(nn.Module):
         self.d3 = nn.Linear(hidden_size[1], hidden_size[2])
         self.d4 = nn.Linear(hidden_size[2], action_dim)  
 
-        self.norme = nn.LayerNorm(hidden_size[0])
-        self.normd = nn.LayerNorm(hidden_size[0])
-
         self.max_action = max_action
         self.action_dim = action_dim
         self.latent_dim = latent_dim
         self.device = device
 
     def forward(self, state, action):
-        # z = F.relu(self.norme(self.e1(torch.cat([state, action], 1))))
         z = F.relu(self.e1(torch.cat([state, action], 1)))
         z = F.relu(self.e2(z))
         z = F.relu(self.e3(z))
@@ -67,12 +61,13 @@ class ActorVAE(nn.Module):
 
         return u, mean, log_var
 
-    def decode(self, state, z=None, clip=None):
-        # When sampling from the VAE, the latent vector is clipped
+    def decode(self, state, z=None, clip=False):
         if z is None:
-            z = torch.randn((state.shape[0], self.latent_dim)).to(self.device)
+            if clip:
+                z = torch.randn((state.shape[0], self.latent_dim)).to(self.device).clamp(-self.max_action, self.max_action)
+            else:
+                z = torch.randn((state.shape[0], self.latent_dim)).to(self.device)
 
-        # a = F.relu(self.normd(self.d1(torch.cat([state, z], 1))))
         a = F.relu(self.d1(torch.cat([state, z], 1)))
         a = F.relu(self.d2(a))
         a = F.relu(self.d3(a))
@@ -82,35 +77,24 @@ class ActorVAE(nn.Module):
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-
         hidden_size = (256, 256, 256)
 
         self.l1 = nn.Linear(state_dim + action_dim, hidden_size[0])
         self.l2 = nn.Linear(hidden_size[0], hidden_size[1])
         self.l3 = nn.Linear(hidden_size[1], hidden_size[2])
         self.l4 = nn.Linear(hidden_size[2], 1)
-        self.norm1 = nn.LayerNorm(hidden_size[0])
 
         self.l5 = nn.Linear(state_dim + action_dim, hidden_size[0])
         self.l6 = nn.Linear(hidden_size[0], hidden_size[1])
         self.l7 = nn.Linear(hidden_size[1], hidden_size[2])
         self.l8 = nn.Linear(hidden_size[2], 1)
-        self.norm2 = nn.LayerNorm(hidden_size[0])
-
-        self.v1 = nn.Linear(state_dim, hidden_size[0])
-        self.v2 = nn.Linear(hidden_size[0], hidden_size[1])
-        self.v3 = nn.Linear(hidden_size[1], hidden_size[2])
-        self.v4 = nn.Linear(hidden_size[2], 1)
-        self.normv = nn.LayerNorm(hidden_size[0])
 
     def forward(self, state, action):
-        # q1 = F.relu(self.norm1(self.l1(torch.cat([state, action], 1))))
         q1 = F.relu(self.l1(torch.cat([state, action], 1)))
         q1 = F.relu(self.l2(q1))
         q1 = F.relu(self.l3(q1))
         q1 = (self.l4(q1))
 
-        # q2 = F.relu(self.norm2(self.l5(torch.cat([state, action], 1))))
         q2 = F.relu(self.l5(torch.cat([state, action], 1)))
         q2 = F.relu(self.l6(q2))
         q2 = F.relu(self.l7(q2))
@@ -118,17 +102,8 @@ class Critic(nn.Module):
         return q1, q2
 
     def q1(self, state, action):
-        # q1 = F.relu(self.norm1(self.l1(torch.cat([state, action], 1))))
         q1 = F.relu(self.l1(torch.cat([state, action], 1)))
         q1 = F.relu(self.l2(q1))
         q1 = F.relu(self.l3(q1))
         q1 = (self.l4(q1))
         return q1
-
-    def v(self, state):
-        # v = F.relu(self.normv(self.v1(state)))
-        v = F.relu(self.v1(state))
-        v = F.relu(self.v2(v))
-        v = F.relu(self.v3(v))
-        v = (self.v4(v))
-        return v

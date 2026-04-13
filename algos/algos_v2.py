@@ -117,8 +117,8 @@ class Latent(nn.Module):
         if iter_id % 1 == 0:
             with torch.no_grad():
                 q1_a, q2_a = self.critic(state, action)
-                q_a = torch.min(q1_a, q2_a)
-                # q_a = (q1_a + q2_a)/2
+                # q_a = torch.min(q1_a, q2_a)
+                q_a = (q1_a + q2_a)/2
                 q_pi = self.get_pi_q(state, self.actor, self.critic, self.actor_vae,
                                      type='min', use_noise=False)
                 adv = q_a - q_pi
