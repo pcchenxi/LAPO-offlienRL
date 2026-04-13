@@ -24,15 +24,14 @@ def eval_policy(policy, env, replay_buffer, eval_episodes=10, plot=False):
     for i in range(eval_episodes):
         state, done = env.reset(), False
         states_list = []
-        q1_list, q2_list, v_list = [], [], []
+        q1_list, q2_list = [], []
         ep_reward = []
         start_states.append(state)
         while not done:
             state = replay_buffer.normalize_state(np.array(state))
-            action, q1, q2, v = policy.select_action(state)
+            action, q1, q2 = policy.select_action(state)
             q1_list.append(q1)
             q2_list.append(q2)
-            v_list.append(v)
             action = replay_buffer.unnormalize_action(action)
 
             state, reward, done, _ = env.step(action)
@@ -83,7 +82,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--expectile', default=0.9, type=float)	        # expectile to compute weight for samples
     parser.add_argument('--kl_beta', default=1.0, type=float)	            # weight for kl loss to train CVAE
-    parser.add_argument('--max_latent_action', default=0.675, type=float)	# maximum value for the latent policy
+    parser.add_argument('--max_latent_action', default=1.0, type=float)	# maximum value for the latent policy
     parser.add_argument('--doubleq_min', default=1.0, type=float)         # weight for the minimum Q value
     parser.add_argument('--no_noise', action='store_true')              # adding noise to the latent policy or not
 

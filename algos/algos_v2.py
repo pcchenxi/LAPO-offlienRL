@@ -59,9 +59,9 @@ class Latent(nn.Module):
 
             action = self.actor_vae.decode(state, z=latent_a)
             q1, q2 = self.critic(state, action)
-            v = self.critic.v(state)
+            # v = self.critic.v(state)
             
-        return action.cpu().data.numpy().flatten(), q1.item(), q2.item(), v.item()
+        return action.cpu().data.numpy().flatten(), q1.item(), q2.item()
 
     def kl_loss(self, mu, log_var):
         kld_loss = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=1).view(-1, 1)
