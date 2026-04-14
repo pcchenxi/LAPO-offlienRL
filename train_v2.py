@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--expectile', default=0.9, type=float)	        # expectile to compute weight for samples
     parser.add_argument('--kl_beta', default=1.0, type=float)	            # weight for kl loss to train CVAE
-    parser.add_argument('--max_latent_action', default=1.0, type=float)	# maximum value for the latent policy
+    parser.add_argument('--max_latent_action', default=0.5, type=float)	# maximum value for the latent policy
     parser.add_argument('--doubleq_min', default=1.0, type=float)         # weight for the minimum Q value
     parser.add_argument('--no_noise', action='store_true')              # adding noise to the latent policy or not
 
